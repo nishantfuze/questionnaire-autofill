@@ -1,0 +1,11 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Sensitive files (add specific files here if needed)
+# *.env
+# credentials.json
+
+# Temporary files
+*.tmp
+*~
