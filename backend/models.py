@@ -1,6 +1,6 @@
 """Pydantic models for the questionnaire autofill backend."""
 
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -14,6 +14,15 @@ class KnowledgeEntry(BaseModel):
     answer: str
 
 
+class EvidenceSnippet(BaseModel):
+    """An evidence snippet retrieved from the knowledge base."""
+    doc_name: str
+    section: str
+    locator: str
+    text: str
+    similarity_score: float = 0.0
+
+
 class MatchResult(BaseModel):
     """Result of matching a question against the knowledge base."""
     matched_entry: Optional[KnowledgeEntry] = None
@@ -21,6 +30,8 @@ class MatchResult(BaseModel):
     confidence_score: int = 0
     confidence_level: str = "Insufficient"
     evidence: str = ""
+    citations: List[str] = []
+    notes: Optional[str] = None
 
 
 class ProcessingStatus(BaseModel):

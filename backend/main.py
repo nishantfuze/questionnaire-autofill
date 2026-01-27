@@ -13,6 +13,7 @@ from services.knowledge_index import KnowledgeIndex
 from services.text_matcher import TextMatcher
 from services.confidence_scorer import ConfidenceScorer
 from services.csv_processor import CSVProcessor
+from services.llm_generator import LLMGenerator
 from models import ProcessingStatus
 import config
 
@@ -27,12 +28,13 @@ logger = logging.getLogger(__name__)
 knowledge_index: KnowledgeIndex = None
 text_matcher: TextMatcher = None
 csv_processor: CSVProcessor = None
+llm_generator: LLMGenerator = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown."""
-    global knowledge_index, text_matcher, csv_processor
+    global knowledge_index, text_matcher, csv_processor, llm_generator
 
     # Startup: Load knowledge base
     logger.info("Starting application...")
@@ -43,10 +45,18 @@ async def lifespan(app: FastAPI):
     logger.info(f"Knowledge base loaded with {entries_loaded} entries")
 
     confidence_scorer = ConfidenceScorer()
-    text_matcher = TextMatcher(knowledge_index, confidence_scorer)
+
+    # Initialize LLM generator if API key is available
+    llm_generator = LLMGenerator()
+    if llm_generator.is_available():
+        logger.info(f"LLM enabled with model: {config.LLM_MODEL}")
+    else:
+        logger.warning("LLM not available (no ANTHROPIC_API_KEY). Using simple matching.")
+
+    text_matcher = TextMatcher(knowledge_index, confidence_scorer, llm_generator)
     csv_processor = CSVProcessor()
 
-    logger.info("Application startup complete")
+    logger.info(f"Application startup complete (LLM: {'enabled' if config.USE_LLM and llm_generator.is_available() else 'disabled'})")
 
     yield
 
@@ -76,7 +86,9 @@ async def health_check():
     """Health check endpoint."""
     return {
         "status": "healthy",
-        "knowledge_base_entries": len(knowledge_index.entries) if knowledge_index else 0
+        "knowledge_base_entries": len(knowledge_index.entries) if knowledge_index else 0,
+        "llm_enabled": config.USE_LLM and llm_generator is not None and llm_generator.is_available(),
+        "llm_model": config.LLM_MODEL if config.USE_LLM else None
     }
 
 
@@ -226,19 +238,23 @@ async def fill_questionnaire_json(file: UploadFile = File(...)):
 
     # Match all questions
     results = []
+    match_results = []
     for row in rows:
         result = text_matcher.match(row.question)
+        match_results.append(result)
         results.append({
             "question": row.question,
             "answer": result.matched_entry.answer if result.matched_entry else "",
             "confidence_score": result.confidence_score,
             "confidence_level": result.confidence_level,
             "evidence": result.evidence,
+            "citations": result.citations,
+            "notes": result.notes,
             "similarity_score": round(result.similarity_score, 4)
         })
 
     # Generate CSV output
-    output_csv = csv_processor.generate_output(original_df, rows, [text_matcher.match(r.question) for r in rows])
+    output_csv = csv_processor.generate_output(original_df, rows, match_results)
 
     return JSONResponse({
         "total_questions": len(rows),

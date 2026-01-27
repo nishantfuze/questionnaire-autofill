@@ -117,25 +117,28 @@ class CSVProcessor:
                     row_data['Answer'] = match_result.matched_entry.answer
                     row_data['Confidence Score'] = match_result.confidence_score
                     row_data['Confidence Level'] = match_result.confidence_level
-                    row_data['Evidence'] = match_result.evidence
+                    row_data['Citations'] = "; ".join(match_result.citations) if match_result.citations else match_result.evidence
+                    row_data['Notes'] = match_result.notes or ""
                 else:
                     row_data['Answer'] = ""
                     row_data['Confidence Score'] = 0
                     row_data['Confidence Level'] = "Insufficient"
-                    row_data['Evidence'] = ""
+                    row_data['Citations'] = ""
+                    row_data['Notes'] = match_result.notes or ""
             else:
                 # Row didn't have a valid question
                 row_data['Answer'] = ""
                 row_data['Confidence Score'] = ""
                 row_data['Confidence Level'] = ""
-                row_data['Evidence'] = ""
+                row_data['Citations'] = ""
+                row_data['Notes'] = ""
 
             output_data.append(row_data)
 
         output_df = pd.DataFrame(output_data)
 
         # Ensure column order: original columns + new columns
-        new_columns = ['Answer', 'Confidence Score', 'Confidence Level', 'Evidence']
+        new_columns = ['Answer', 'Confidence Score', 'Confidence Level', 'Citations', 'Notes']
         column_order = self.original_columns + [c for c in new_columns if c not in self.original_columns]
         output_df = output_df.reindex(columns=column_order)
 
