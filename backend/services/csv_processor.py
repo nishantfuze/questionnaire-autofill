@@ -122,7 +122,7 @@ class CSVProcessor:
                 else:
                     row_data['Answer'] = ""
                     row_data['Confidence Score'] = 0
-                    row_data['Confidence Level'] = "Insufficient"
+                    row_data['Confidence Level'] = "Requires Human Attention"
                     row_data['Citations'] = ""
                     row_data['Notes'] = match_result.notes or ""
             else:

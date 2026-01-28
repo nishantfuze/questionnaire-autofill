@@ -78,7 +78,7 @@ class TextMatcher:
                 matched_entry=None,
                 similarity_score=0.0,
                 confidence_score=0,
-                confidence_level="Insufficient",
+                confidence_level="Requires Human Attention",
                 evidence="",
                 citations=[],
                 notes="Question too short or empty."
@@ -92,7 +92,7 @@ class TextMatcher:
                 matched_entry=None,
                 similarity_score=0.0,
                 confidence_score=0,
-                confidence_level="Insufficient",
+                confidence_level="Requires Human Attention",
                 evidence="",
                 citations=[],
                 notes="No relevant evidence found in knowledge base."
@@ -142,7 +142,7 @@ class TextMatcher:
                 matched_entry=None,
                 similarity_score=0.0,
                 confidence_score=0,
-                confidence_level="Insufficient",
+                confidence_level="Requires Human Attention",
                 evidence="",
                 citations=[],
                 notes=None

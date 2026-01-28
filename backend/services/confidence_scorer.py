@@ -71,4 +71,4 @@ class ConfidenceScorer:
         elif score >= config.CONFIDENCE_LOW:
             return "Low"
         else:
-            return "Insufficient"
+            return "Requires Human Attention"

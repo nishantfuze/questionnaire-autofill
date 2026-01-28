@@ -28,7 +28,7 @@ class MatchResult(BaseModel):
     matched_entry: Optional[KnowledgeEntry] = None
     similarity_score: float = 0.0
     confidence_score: int = 0
-    confidence_level: str = "Insufficient"
+    confidence_level: str = "Requires Human Attention"
     evidence: str = ""
     citations: List[str] = []
     notes: Optional[str] = None

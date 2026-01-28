@@ -1,10 +1,11 @@
-"""Knowledge base indexing service using TF-IDF."""
+"""Knowledge base indexing service using TF-IDF with improved retrieval."""
 
 import logging
 from pathlib import Path
 from typing import List, Optional, Tuple
 
 import pandas as pd
+import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from models import KnowledgeEntry
@@ -14,12 +15,16 @@ logger = logging.getLogger(__name__)
 
 
 class KnowledgeIndex:
-    """Indexes and searches the knowledge base using TF-IDF."""
+    """Indexes and searches the knowledge base using TF-IDF on both questions and answers."""
 
     def __init__(self):
         self.entries: List[KnowledgeEntry] = []
-        self.vectorizer: Optional[TfidfVectorizer] = None
-        self.tfidf_matrix = None
+        self.question_vectorizer: Optional[TfidfVectorizer] = None
+        self.answer_vectorizer: Optional[TfidfVectorizer] = None
+        self.combined_vectorizer: Optional[TfidfVectorizer] = None
+        self.question_matrix = None
+        self.answer_matrix = None
+        self.combined_matrix = None
         self._entry_id_counter = 0
 
     def load_all(self) -> int:
@@ -72,16 +77,13 @@ class KnowledgeIndex:
         current_section = "General"
 
         for idx, row in df.iterrows():
-            # Check if this row is a section header (first column has value, second is empty or matches first)
             first_col = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
             second_col = str(row.iloc[1]).strip() if len(row) > 1 and pd.notna(row.iloc[1]) else ""
 
-            # Section headers have text in first column but question column is empty
             if first_col and not second_col:
                 current_section = first_col
                 continue
 
-            # Extract question (column 1) and answer (column 3 - Ila Bahrain)
             if len(row) > 3:
                 question = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else ""
                 answer = str(row.iloc[3]).strip() if pd.notna(row.iloc[3]) else ""
@@ -96,12 +98,10 @@ class KnowledgeIndex:
         for idx, row in df.iterrows():
             first_col = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
 
-            # Section headers have text in first column only
             if first_col and (len(row) < 2 or pd.isna(row.iloc[1]) or str(row.iloc[1]).strip() == ""):
                 current_section = first_col
                 continue
 
-            # Extract question (column 1) and vendor response (column 2)
             if len(row) > 2:
                 question = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else ""
                 answer = str(row.iloc[2]).strip() if pd.notna(row.iloc[2]) else ""
@@ -114,16 +114,13 @@ class KnowledgeIndex:
         current_section = "General"
 
         for idx, row in df.iterrows():
-            # Check for section header (column 0 is letter like 'A', 'B')
             sl_no = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
             param = str(row.iloc[1]).strip() if len(row) > 1 and pd.notna(row.iloc[1]) else ""
 
-            # Section headers have single letter in SL NO
             if sl_no and len(sl_no) == 1 and sl_no.isalpha():
                 current_section = param if param else sl_no
                 continue
 
-            # Extract question (column 1 - Parameters) and answer (column 3 - Comments)
             if len(row) > 3:
                 question = param
                 answer = str(row.iloc[3]).strip() if pd.notna(row.iloc[3]) else ""
@@ -138,11 +135,9 @@ class KnowledgeIndex:
         for idx, row in df.iterrows():
             risk_domain = str(row.iloc[0]).strip() if pd.notna(row.iloc[0]) else ""
 
-            # Update section based on risk domain
             if risk_domain and risk_domain.upper() == risk_domain and len(risk_domain) > 2:
                 current_section = risk_domain
 
-            # Extract question (column 1) and service provider response (column 4)
             if len(row) > 4:
                 question = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else ""
                 answer = str(row.iloc[4]).strip() if pd.notna(row.iloc[4]) else ""
@@ -157,7 +152,6 @@ class KnowledgeIndex:
                 question = str(row.iloc[1]).strip() if pd.notna(row.iloc[1]) else ""
                 answer = str(row.iloc[3]).strip() if pd.notna(row.iloc[3]) else ""
 
-                # Skip placeholder answers and headers
                 if (question and answer and
                     question.lower() != "question" and
                     "<please provide" not in answer.lower() and
@@ -166,7 +160,6 @@ class KnowledgeIndex:
 
     def _parse_generic(self, df: pd.DataFrame, doc_name: str):
         """Generic parser for unknown CSV formats."""
-        # Try to find question and answer columns
         columns = df.columns.tolist()
         question_col = None
         answer_col = None
@@ -193,7 +186,6 @@ class KnowledgeIndex:
 
     def _add_entry(self, doc_name: str, section: str, row_number: int, question: str, answer: str):
         """Add an entry to the knowledge base."""
-        # Skip very short or empty answers
         if not answer or len(answer) < 5:
             return
 
@@ -209,19 +201,50 @@ class KnowledgeIndex:
         self.entries.append(entry)
 
     def _build_index(self):
-        """Build the TF-IDF index from all entries."""
+        """Build TF-IDF indexes for questions, answers, and combined."""
         questions = [entry.question for entry in self.entries]
+        answers = [entry.answer for entry in self.entries]
+        # Combined: question + answer for semantic matching
+        combined = [f"{entry.question} {entry.answer}" for entry in self.entries]
 
-        self.vectorizer = TfidfVectorizer(
+        # Question index
+        self.question_vectorizer = TfidfVectorizer(
             min_df=config.MIN_DF,
             max_df=config.MAX_DF,
             ngram_range=config.NGRAM_RANGE,
             stop_words='english',
             lowercase=True
         )
+        self.question_matrix = self.question_vectorizer.fit_transform(questions)
 
-        self.tfidf_matrix = self.vectorizer.fit_transform(questions)
-        logger.info(f"Built TF-IDF index with vocabulary size: {len(self.vectorizer.vocabulary_)}")
+        # Answer index - for finding answers that contain relevant information
+        self.answer_vectorizer = TfidfVectorizer(
+            min_df=config.MIN_DF,
+            max_df=config.MAX_DF,
+            ngram_range=config.NGRAM_RANGE,
+            stop_words='english',
+            lowercase=True
+        )
+        self.answer_matrix = self.answer_vectorizer.fit_transform(answers)
+
+        # Combined index - best of both worlds
+        self.combined_vectorizer = TfidfVectorizer(
+            min_df=config.MIN_DF,
+            max_df=config.MAX_DF,
+            ngram_range=config.NGRAM_RANGE,
+            stop_words='english',
+            lowercase=True
+        )
+        self.combined_matrix = self.combined_vectorizer.fit_transform(combined)
+
+        logger.info(f"Built TF-IDF indexes - Q vocab: {len(self.question_vectorizer.vocabulary_)}, "
+                   f"A vocab: {len(self.answer_vectorizer.vocabulary_)}, "
+                   f"Combined vocab: {len(self.combined_vectorizer.vocabulary_)}")
+
+    @property
+    def vectorizer(self):
+        """Backward compatibility - return combined vectorizer."""
+        return self.combined_vectorizer
 
     def get_entry_by_id(self, entry_id: int) -> Optional[KnowledgeEntry]:
         """Get an entry by its ID."""
@@ -231,19 +254,70 @@ class KnowledgeIndex:
         return None
 
     def search(self, query: str, top_k: int = 5) -> List[Tuple[KnowledgeEntry, float]]:
-        """Search for similar questions. Returns list of (entry, similarity_score) tuples."""
-        if not self.vectorizer or self.tfidf_matrix is None:
+        """
+        Search using multiple strategies and combine results.
+        Returns list of (entry, similarity_score) tuples.
+        """
+        if not self.combined_vectorizer or self.combined_matrix is None:
             return []
 
-        query_vector = self.vectorizer.transform([query])
-        similarities = (self.tfidf_matrix @ query_vector.T).toarray().flatten()
+        # Strategy 1: Search questions
+        q_scores = self._search_matrix(query, self.question_vectorizer, self.question_matrix)
+
+        # Strategy 2: Search answers (find answers containing query concepts)
+        a_scores = self._search_matrix(query, self.answer_vectorizer, self.answer_matrix)
+
+        # Strategy 3: Search combined
+        c_scores = self._search_matrix(query, self.combined_vectorizer, self.combined_matrix)
+
+        # Weighted combination: prioritize question match, then combined, then answer
+        combined_scores = np.zeros(len(self.entries))
+        for i in range(len(self.entries)):
+            # Question match is most important (0.5), combined (0.3), answer (0.2)
+            combined_scores[i] = (0.5 * q_scores[i] + 0.3 * c_scores[i] + 0.2 * a_scores[i])
 
         # Get top-k indices
-        top_indices = similarities.argsort()[-top_k:][::-1]
+        top_indices = combined_scores.argsort()[-top_k:][::-1]
 
         results = []
         for idx in top_indices:
-            if similarities[idx] > 0:
-                results.append((self.entries[idx], float(similarities[idx])))
+            if combined_scores[idx] > 0:
+                results.append((self.entries[idx], float(combined_scores[idx])))
+
+        return results
+
+    def _search_matrix(self, query: str, vectorizer: TfidfVectorizer, matrix) -> np.ndarray:
+        """Search a single TF-IDF matrix."""
+        try:
+            query_vector = vectorizer.transform([query])
+            return (matrix @ query_vector.T).toarray().flatten()
+        except Exception:
+            return np.zeros(len(self.entries))
+
+    def search_by_keywords(self, keywords: List[str], top_k: int = 5) -> List[Tuple[KnowledgeEntry, float]]:
+        """Search by specific keywords in answers."""
+        scores = np.zeros(len(self.entries))
+
+        for i, entry in enumerate(self.entries):
+            answer_lower = entry.answer.lower()
+            question_lower = entry.question.lower()
+
+            for kw in keywords:
+                kw_lower = kw.lower()
+                if kw_lower in answer_lower:
+                    scores[i] += 1.0
+                if kw_lower in question_lower:
+                    scores[i] += 0.5
+
+        # Normalize
+        max_score = scores.max() if scores.max() > 0 else 1
+        scores = scores / max_score
+
+        top_indices = scores.argsort()[-top_k:][::-1]
+
+        results = []
+        for idx in top_indices:
+            if scores[idx] > 0:
+                results.append((self.entries[idx], float(scores[idx])))
 
         return results

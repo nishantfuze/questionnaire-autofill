@@ -2,9 +2,10 @@
 .DS_Store
 Thumbs.db
 
-# Sensitive files (add specific files here if needed)
-# *.env
-# credentials.json
+# Sensitive files
+.env
+*.env
+credentials.json
 
 # Temporary files
 *.tmp

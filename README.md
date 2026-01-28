@@ -7,71 +7,121 @@ An internal tool that automates filling onboarding questionnaires from regulated
 This tool helps teams respond to bank RFPs, due diligence questionnaires, and compliance assessments by:
 
 1. Building a knowledge index from uploaded internal documents
-2. Matching new questions to relevant answers in the knowledge base
+2. Matching new questions to relevant answers using hybrid AI matching
 3. Generating structured responses with confidence scores and citations
+
+## Architecture
+
+```
+questionnaire-tool/
+├── backend/                    # FastAPI backend (Python)
+│   ├── main.py                # API endpoints
+│   ├── config.py              # Configuration
+│   ├── models.py              # Pydantic schemas
+│   └── services/
+│       ├── knowledge_index.py  # TF-IDF indexing
+│       ├── smart_matcher.py    # Concept-based retrieval
+│       ├── hybrid_matcher.py   # SmartMatcher + LLM synthesis
+│       ├── llm_generator.py    # OpenAI GPT integration
+│       └── csv_processor.py    # CSV parsing/output
+├── frontend/                   # Next.js frontend
+│   ├── app/page.tsx           # Main UI
+│   ├── components/            # React components
+│   └── lib/                   # API client utilities
+└── *.csv                      # Knowledge base documents
+```
 
 ## Features
 
-- **Automated Answer Matching** — Finds the best matching answer from your knowledge base
+- **Hybrid AI Matching** — Combines concept-based retrieval with LLM synthesis
+- **RAG Architecture** — LLM answers ONLY from knowledge base, no hallucination
 - **Confidence Scoring** — Each answer includes a confidence score (0-100)
 - **Citation Tracking** — Every answer includes source document references
-- **TSV Output** — Google Sheets-ready format for easy copy-paste
-- **Follow-up Tracking** — Identifies questions that need manual review
+- **Smart Question Detection** — Identifies questions that require human attention
+- **Web Interface** — Drag-and-drop CSV upload with real-time progress
+
+## Quick Start
+
+### 1. Backend Setup
+
+```bash
+cd backend
+pip install -r requirements.txt
+
+# Create .env file with your OpenAI API key
+echo "OPENAI_API_KEY=your-key-here" > .env
+echo "USE_LLM=true" >> .env
+echo "LLM_MODEL=gpt-5.1" >> .env
+
+# Start server
+uvicorn main:app --reload --port 8000
+```
+
+### 2. Frontend Setup
+
+```bash
+cd frontend
+npm install
+npm run dev -- -p 3001
+```
+
+### 3. Access the Application
+
+- **Frontend**: http://localhost:3001
+- **Backend API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+
+## Configuration
+
+Environment variables (`.env` file in backend/):
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OPENAI_API_KEY` | OpenAI API key | Required |
+| `USE_LLM` | Enable LLM synthesis | `true` |
+| `LLM_MODEL` | OpenAI model to use | `gpt-5.1` |
+
+## Confidence Score Guide
+
+| Score | Level | Meaning |
+|-------|-------|---------|
+| 90-100 | High | Directly answered from knowledge base |
+| 75-89 | Medium | Strong support with minor inference |
+| 50-74 | Low | Partial information, needs review |
+| 0-49 | Requires Human Attention | Not found or internal question |
 
 ## Knowledge Base Documents
 
 | Document | Description |
 |----------|-------------|
-| `TPRMDueDiligenceResidualRiskTemplate` | Third-Party Risk Management questionnaire (Mashreq) |
-| `rbgplatformquestionnaire` | RBG Platform technical questionnaire |
-| `Trading_Vendor_Questions_IT` | IT and infrastructure questions |
-| `Questions_for_bidder` | Ila Bahrain bidder questionnaire |
+| `Questions_for_bidder_Questions.csv` | Business/functional Q&A |
+| `Trading_Vendor_Questions_IT_Questions.csv` | IT infrastructure Q&A |
+| `rbgplatformquestionnaire_questionnaire.csv` | Platform capabilities |
+| `TPRMDueDiligenceResidualRiskTemplate_Due_Dilgence_Template.csv` | Risk/compliance Q&A |
+| `TPRMDueDiligenceResidualRiskTemplate_KYTP.csv` | KYTP form data |
 
-## Output Format
+## API Endpoints
 
-Generated responses are saved as TSV files with the following columns:
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check with LLM status |
+| `/api/v1/questionnaire/fill` | POST | Fill questionnaire (streaming) |
+| `/api/v1/questionnaire/fill-json` | POST | Fill questionnaire (JSON response) |
+| `/api/v1/knowledge-base/stats` | GET | Knowledge base statistics |
 
-| Column | Description |
-|--------|-------------|
-| Question | The original question from the questionnaire |
-| Answer | Generated answer from knowledge base |
-| Confidence Score | 0-100 rating of answer reliability |
-| Evidence | Source citation `[Document > Section > Row]` |
+## How It Works
 
-### Confidence Score Guide
-
-| Score | Meaning |
-|-------|---------|
-| 90-100 | High confidence — explicitly stated in documents |
-| 70-89 | Medium confidence — strong match, minor inference |
-| 40-69 | Low confidence — partial info, needs confirmation |
-| 0-39 | Insufficient — not found in knowledge base |
-
-## Usage
-
-1. Add knowledge documents (CSV/XLSX) to the project folder
-2. Provide the blank questionnaire to be filled
-3. Run the autofill agent
-4. Review the generated TSV output
-5. Address any follow-ups flagged by the agent
-
-## Files
-
-```
-questionnaire-autofill/
-├── README.md
-├── .gitignore
-├── RFP_Clarifications_Filled.tsv      # Output
-├── RFP_Queries_-_test_Table.csv       # Input questionnaire
-└── *_*.csv                            # Knowledge base documents
-```
+1. **Evidence Retrieval**: SmartMatcher uses concept-based ranking to find relevant answers from the knowledge base
+2. **LLM Synthesis**: GPT synthesizes a coherent answer from the retrieved evidence
+3. **Citation**: Every answer includes citations to source documents
+4. **Validation**: Questions about internal matters (e.g., "What SSO does Mashreq use?") are flagged as requiring human attention
 
 ## Strict Rules
 
 - Answers are only generated from uploaded knowledge documents
 - No hallucination or invented information
 - Regulatory/licensing claims are never guessed
-- Unanswerable questions are marked as "Insufficient information"
+- Unanswerable questions are marked as "Requires Human Attention"
 
 ## License
 

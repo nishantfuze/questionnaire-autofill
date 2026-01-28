@@ -2,6 +2,10 @@
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Base paths
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -68,11 +72,11 @@ HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", 8000))
 
 # LLM settings
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-LLM_MODEL = os.getenv("LLM_MODEL", "claude-sonnet-4-20250514")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-5.1")
 LLM_MAX_TOKENS = 1024
 LLM_TEMPERATURE = 0.0  # Deterministic for consistency
 
 # RAG settings
 TOP_K_EVIDENCE = 5  # Number of evidence snippets to retrieve
-USE_LLM = os.getenv("USE_LLM", "true").lower() == "true"  # Toggle LLM vs simple matching
+USE_LLM = os.getenv("USE_LLM", "false").lower() == "true"  # Toggle LLM vs simple matching

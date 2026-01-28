@@ -14,6 +14,8 @@ from services.text_matcher import TextMatcher
 from services.confidence_scorer import ConfidenceScorer
 from services.csv_processor import CSVProcessor
 from services.llm_generator import LLMGenerator
+from services.smart_matcher import SmartMatcher
+from services.hybrid_matcher import HybridMatcher
 from models import ProcessingStatus
 import config
 
@@ -26,15 +28,16 @@ logger = logging.getLogger(__name__)
 
 # Global services
 knowledge_index: KnowledgeIndex = None
-text_matcher: TextMatcher = None
+text_matcher = None  # Can be TextMatcher or SmartMatcher
 csv_processor: CSVProcessor = None
 llm_generator: LLMGenerator = None
+smart_matcher: SmartMatcher = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler for startup/shutdown."""
-    global knowledge_index, text_matcher, csv_processor, llm_generator
+    global knowledge_index, text_matcher, csv_processor, llm_generator, smart_matcher
 
     # Startup: Load knowledge base
     logger.info("Starting application...")
@@ -48,15 +51,21 @@ async def lifespan(app: FastAPI):
 
     # Initialize LLM generator if API key is available
     llm_generator = LLMGenerator()
-    if llm_generator.is_available():
-        logger.info(f"LLM enabled with model: {config.LLM_MODEL}")
-    else:
-        logger.warning("LLM not available (no ANTHROPIC_API_KEY). Using simple matching.")
 
-    text_matcher = TextMatcher(knowledge_index, confidence_scorer, llm_generator)
+    # Initialize smart matcher (used for concept-based retrieval)
+    smart_matcher = SmartMatcher(knowledge_index)
+
+    if llm_generator.is_available() and config.USE_LLM:
+        logger.info(f"LLM enabled with model: {config.LLM_MODEL}")
+        # Use HybridMatcher: SmartMatcher's retrieval + LLM synthesis
+        text_matcher = HybridMatcher(knowledge_index, smart_matcher, llm_generator)
+    else:
+        logger.info("Using SmartMatcher (concept-based matching without LLM)")
+        text_matcher = smart_matcher
+
     csv_processor = CSVProcessor()
 
-    logger.info(f"Application startup complete (LLM: {'enabled' if config.USE_LLM and llm_generator.is_available() else 'disabled'})")
+    logger.info(f"Application startup complete (Mode: {'LLM' if llm_generator.is_available() and config.USE_LLM else 'SmartMatcher'})")
 
     yield
 
@@ -165,14 +174,14 @@ async def generate_streaming_response(
         high_conf = sum(1 for r in results if r.confidence_level == "High")
         medium_conf = sum(1 for r in results if r.confidence_level == "Medium")
         low_conf = sum(1 for r in results if r.confidence_level == "Low")
-        insufficient = sum(1 for r in results if r.confidence_level == "Insufficient")
+        insufficient = sum(1 for r in results if r.confidence_level == "Requires Human Attention")
 
         output_filename = filename.replace(".csv", "_filled.csv")
 
         yield status_line(
             "ready",
             100,
-            f"Ready to download. High: {high_conf}, Medium: {medium_conf}, Low: {low_conf}, Insufficient: {insufficient}",
+            f"Ready to download. High: {high_conf}, Medium: {medium_conf}, Low: {low_conf}, Requires Human Attention: {insufficient}",
             output_filename
         )
 
@@ -264,7 +273,7 @@ async def fill_questionnaire_json(file: UploadFile = File(...)):
             "high": sum(1 for r in results if r["confidence_level"] == "High"),
             "medium": sum(1 for r in results if r["confidence_level"] == "Medium"),
             "low": sum(1 for r in results if r["confidence_level"] == "Low"),
-            "insufficient": sum(1 for r in results if r["confidence_level"] == "Insufficient")
+            "requires_human_attention": sum(1 for r in results if r["confidence_level"] == "Requires Human Attention")
         }
     })
 
