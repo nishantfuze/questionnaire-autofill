@@ -9,7 +9,7 @@ load_dotenv()
 
 # Base paths
 PROJECT_ROOT = Path(__file__).parent.parent
-KNOWLEDGE_BASE_DIR = PROJECT_ROOT
+KNOWLEDGE_BASE_DIR = Path(__file__).parent  # Look in backend folder
 
 # Knowledge base files to load
 KNOWLEDGE_BASE_FILES = [
