@@ -149,8 +149,8 @@ export default function Home() {
                     <span className="font-medium text-orange-600">{result.summary.low}</span>
                   </div>
                   <div className="flex justify-between col-span-2">
-                    <span className="text-red-600">Insufficient:</span>
-                    <span className="font-medium text-red-600">{result.summary.insufficient}</span>
+                    <span className="text-red-600">Requires Human Attention:</span>
+                    <span className="font-medium text-red-600">{result.summary.requires_human_attention}</span>
                   </div>
                 </div>
               </div>

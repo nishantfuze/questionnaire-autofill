@@ -22,7 +22,7 @@ export interface FillResponse {
     high: number;
     medium: number;
     low: number;
-    insufficient: number;
+    requires_human_attention: number;
   };
 }
 
